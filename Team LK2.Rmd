@@ -1,0 +1,201 @@
+---
+title: "Project"
+output: html_document
+date: "2024-11-16"
+---
+
+```{r}
+install.packages("ucimlrepo")
+install.packages("nnet")
+library(nnet)
+library(ggplot2) 
+library(caret)
+library(randomForest)
+library(ucimlrepo)
+```
+
+```{r}
+# Fetch the dataset
+land_mines <- fetch_ucirepo(id = 763)
+```
+
+```{r}
+names(land_mines)
+```
+
+```{r}
+str(land_mines)
+```
+
+```{r}
+land_mines_df <- land_mines$data$original
+head(land_mines_df)
+```
+
+```{r}
+# Data (as data frames)
+X <- land_mines$data$features
+y <- land_mines$data$targets
+```
+
+```{r}
+# Metadata
+print(land_mines$metadata)
+```
+
+```{r}
+# Variable information
+print(land_mines$variables)
+```
+
+```{r}
+str(X)
+```
+
+```{r}
+str(y)
+```
+
+```{r}
+#Converting target variable to factor
+y <- factor(y$M)
+str(y)
+```
+
+```{r}
+# Finding duplicates in the features and target
+duplicate_X <- sum(duplicated(land_mines$data$features))
+duplicate_y <- sum(duplicated(land_mines$data$targets))
+cat("Number of duplicate rows in X: ", duplicate_X, "\n", "Number of duplicate entries in y: ", duplicate_y, "\n")
+```
+
+```{r}
+#Summary of the features
+summary(X)
+```
+
+
+```{r}
+# Visualizing distributions of Voltage
+ggplot(X, aes(x = V)) + geom_histogram(bins = 30, fill = 'blue', alpha
+= 0.7) + labs(title = "Distribution of Voltage (V)")
+```
+
+```{r}
+# Visualising distributions of Height
+ggplot(X, aes(x = H)) + geom_histogram(bins = 30, fill = 'green', 
+alpha = 0.7) + labs(title = "Distribution of Height (H)")
+
+```
+
+```{r}
+# Visualising distributions of Soil
+ggplot(X, aes(x = S)) + geom_histogram(bins = 30, fill = 'red', alpha 
+= 0.7) + labs(title = "Distribution of Soil (S)")
+```
+
+```{r}
+# Distribution of mine type
+barplot(table(land_mines_df$M), main = "Mine Type Distribution", xlab 
+= "Mine Type", ylab = "Frequency")
+```
+
+```{r}
+# Plot of voltage vs height
+plot(land_mines_df$V, land_mines_df$H, main = "Voltage vs Height", 
+xlab = "Voltage", ylab = "Height")
+```
+
+```{r}
+# Plot of voltage vs soil type
+plot(land_mines_df$V, land_mines_df$S, main = "Voltage vs Soil Type", 
+xlab = "Voltage", ylab = "Soil Type")
+```
+
+```{r}
+# Plot of voltage by minetype
+boxplot(V ~ M, data = land_mines_df, main = "Voltage by Mine Type", 
+xlab = "Mine Type", ylab = "Voltage")
+```
+
+```{r}
+# Plot of height by minetype
+boxplot(H ~ M, data = land_mines_df, main = "Height by Mine Type", 
+xlab = "Mine Type", ylab = "Height")
+```
+
+
+```{r}
+# Apply PCA
+X_scaled <- scale(X)
+pca <- prcomp(X_scaled, center = TRUE, scale. = TRUE)
+summary(pca)
+```
+
+```{r}
+# K-means clustering model
+set.seed(123)
+kmeans_result <- kmeans(X_scaled, centers = 3, nstart = 25)
+print(kmeans_result)
+```
+
+```{r}
+# logistic regression model
+data <- data.frame(X, y = as.factor(y))
+model_multinom <- multinom(y ~ ., data = data)
+summary(model_multinom)
+```
+
+```{r}
+# Knn modelling
+set.seed(123)
+train_indices <- createDataPartition(y, p = 0.8, list = FALSE)
+train_data <- data.frame(X[train_indices, ], y = y[train_indices])
+test_data <- data.frame(X[-train_indices, ], y = y[-train_indices])
+train_control <- trainControl(method = "cv", number = 10)  
+k_value_tune <- expand.grid(k = seq(1, 20, by = 1))
+# Training the k-NN model
+knn_model <- train(y ~ .,
+                   data = train_data,
+                   method = "knn",
+                   trControl = train_control,
+                   tuneGrid = k_value_tune,
+                   preProcess = c("center", "scale")) 
+print(knn_model)
+print(paste("The Best k value for k-NN is", knn_model$bestTune$k))
+
+# Evaluate the model on the test set
+knn_predictions <- predict(knn_model, newdata = test_data)
+confusion_matrix_knn <- confusionMatrix(knn_predictions, test_data$y)
+
+# Confusion matrix and accuracy
+print(confusion_matrix_knn)
+cat("The Accuracy of k-NN model:", round(confusion_matrix_knn$overall["Accuracy"] * 100, 2), "%\n")
+
+# Plot k-NN model performance during tuning
+plot(knn_model)
+```
+
+
+```{r}
+# Random Forest model
+model_rf <- randomForest(y ~ V + H + S, data = data, ntree = 100)
+print(model_rf)
+predictions <- predict(model_rf, data)
+confusion_matrix <- table(predictions, data$y)
+print(confusion_matrix)
+accuracy <- sum(predictions == data$y) / nrow(data)
+print(paste("Accuracy:", round(accuracy * 100, 2), "%"))
+# Plotting variable importance
+importance(model_rf)
+varImpPlot(model_rf)
+# Confusion matrix for Random Forest model
+pred <- predict(model_rf, newdata = X)
+confusionMatrix(pred, y)
+```
+
+```{r}
+train_control <- trainControl(method = "cv", number = 20)
+model_rf_cv <- train(y ~ ., data = cbind(X, y), method = "rf", trControl = train_control)
+print(model_rf_cv)
+```
